@@ -214,11 +214,6 @@ pydub==0.25.1
 Pygments==2.19.2
 pylatexenc==2.10
 pyngrok==7.5.0
-pyobjc-core==12.1
-pyobjc-framework-Cocoa==12.1
-pyobjc-framework-CoreML==12.1
-pyobjc-framework-Quartz==12.1
-pyobjc-framework-Vision==12.1
 pyparsing==3.3.2
 pypdf==6.5.0
 PyPDF2==3.0.1
