@@ -26,6 +26,8 @@ langsmith==0.4.27
 # Vector Search & Embeddings
 faiss-cpu>=1.7.4
 sentence-transformers>=2.2.2
+joblib==1.4.2          # ← add this line (or change to ==1.4.2 if already present)
+
 
 # Document Processing
 pypdf>=4.0.1
