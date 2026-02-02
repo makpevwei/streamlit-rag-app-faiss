@@ -1,0 +1,26 @@
+# Core Framework
+streamlit>=1.28.1
+
+# LangChain (Loosened to allow compatibility)
+langchain>=0.1.8
+langchain-core>=0.1.24
+langchain-groq
+langchain-huggingface
+
+# Vector Search & Embeddings
+faiss-cpu>=1.7.4
+sentence-transformers>=2.2.2
+
+# Document Processing
+pypdf>=4.0.1
+python-docx
+openpyxl
+pandas>=2.1.3
+beautifulsoup4
+
+# Utilities
+python-dotenv
+pydantic>=2.0.0
+
+# PyTorch (Required for sentence-transformers)
+torch --index-url https://download.pytorch.org/whl/cpu
