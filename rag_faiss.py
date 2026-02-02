@@ -1,5 +1,5 @@
 # ───────────────────────────────────────────────────────
-#   IMPORTANT: Put this at the VERY TOP to fix tokenizer warning
+# IMPORTANT: Put this at the VERY TOP to fix tokenizer warning
 # ───────────────────────────────────────────────────────
 import os
 os.environ["TOKENIZERS_PARALLELISM"] = "false"
@@ -18,7 +18,6 @@ from langchain_core.messages import HumanMessage, AIMessage
 from langchain_core.output_parsers import StrOutputParser
 from langchain_core.runnables import RunnableParallel
 from operator import itemgetter
-
 from langchain_community.vectorstores import FAISS
 from langchain_huggingface import HuggingFaceEmbeddings
 from langchain_groq import ChatGroq
@@ -27,8 +26,8 @@ from langchain_text_splitters import RecursiveCharacterTextSplitter
 
 # Simple fast loaders
 from langchain_community.document_loaders import (
-    PyPDFLoader, 
-    TextLoader, 
+    PyPDFLoader,
+    TextLoader,
     CSVLoader,
     UnstructuredMarkdownLoader,
     Docx2txtLoader,
@@ -50,17 +49,14 @@ st.markdown("**Fast by default** | Optional Docling for complex documents")
 # Session state
 if "chat_history" not in st.session_state:
     st.session_state.chat_history = []
-
 if "vectorstore" not in st.session_state:
     st.session_state.vectorstore = None
-
 if "retriever" not in st.session_state:
     st.session_state.retriever = None
 
 # ───────────────────────────────────────────────────────
 # Load API keys (Support for .env AND Streamlit Secrets)
 # ───────────────────────────────────────────────────────
-# Local development uses .env, Streamlit Cloud uses st.secrets
 GROQ_API_KEY = os.getenv("GROQ_API_KEY") or st.secrets.get("GROQ_API_KEY")
 GOOGLE_API_KEY = os.getenv("GOOGLE_API_KEY") or st.secrets.get("GOOGLE_API_KEY")
 
@@ -85,80 +81,73 @@ def process_files_fast(uploaded_files):
     """Fast processing with simple loaders + text splitter"""
     all_docs = []
     temp_dir = tempfile.mkdtemp()
-    
-    # Text splitter for chunking
+   
+    # Text splitter — lowered size to avoid token overflow & memory issues
     text_splitter = RecursiveCharacterTextSplitter(
-        chunk_size=1000,
-        chunk_overlap=200
+        chunk_size=500,           # ← was 1000 — safer for all-MiniLM-L6-v2 (512 tokens)
+        chunk_overlap=100,
+        separators=["\n\n", "\n", ". ", " ", ""],
+        length_function=len
     )
+   
+    # Optional: more precise token-based splitting (uncomment if needed)
+    # from langchain_text_splitters import TokenTextSplitter
+    # text_splitter = TokenTextSplitter(chunk_size=400, chunk_overlap=80)
 
     for file in uploaded_files:
         ext = Path(file.name).suffix.lower()
         temp_path = os.path.join(temp_dir, file.name)
-
         with open(temp_path, "wb") as f:
             f.write(file.getbuffer())
-
         try:
-            # Get simple loader
             loader = get_simple_loader(temp_path, ext)
-            
             if loader:
-                # Load document
                 docs = loader.load()
-                
-                # Split into chunks
                 chunks = text_splitter.split_documents(docs)
-                
-                # Add source metadata
                 for chunk in chunks:
                     chunk.metadata["source_file"] = file.name
-                
                 all_docs.extend(chunks)
                 st.success(f"✅ {file.name}: {len(chunks)} chunks")
             else:
                 st.warning(f"⚠️ {file.name}: Unsupported format")
-            
         except Exception as e:
             st.error(f"❌ {file.name}: {str(e)}")
-
     return all_docs
 
 def process_files_with_docling(uploaded_files):
     """Slower but smarter processing with Docling"""
     all_docs = []
     temp_dir = tempfile.mkdtemp()
-
     for file in uploaded_files:
         ext = Path(file.name).suffix.lower()
         temp_path = os.path.join(temp_dir, file.name)
-
         with open(temp_path, "wb") as f:
             f.write(file.getbuffer())
-
         try:
+            # Try to enable external plugins (may or may not be supported in your version)
             loader = DoclingLoader(
                 file_path=temp_path,
-                export_type=ExportType.DOC_CHUNKS
+                export_type=ExportType.DOC_CHUNKS,
+                # allow_external_plugins=True   # Uncomment if your version accepts it
             )
             docs = loader.load()
-            
+           
             # Add source metadata
             for doc in docs:
                 doc.metadata["source_file"] = file.name
-            
+           
             # Filter empty docs
             docs = [d for d in docs if d.page_content and d.page_content.strip()]
-            
+           
             if docs:
                 all_docs.extend(docs)
                 st.success(f"✅ {file.name}: {len(docs)} semantic chunks")
             else:
-                st.warning(f"⚠️ {file.name}: No content extracted")
-            
+                st.warning(f"⚠️ {file.name}: No content extracted (check if OCR/layout worked)")
+           
         except Exception as e:
-            st.error(f"❌ {file.name}: {str(e)}")
-
+            st.error(f"❌ Docling failed for {file.name}: {str(e)}")
+            st.exception(e)  # Shows full traceback in UI — very helpful for debugging
     return all_docs
 
 # ───────────────────────────────────────────────────────
@@ -174,7 +163,7 @@ def get_llm():
             )
         except Exception as e:
             st.warning(f"⚠️ Groq failed: {e}")
-    
+   
     if GOOGLE_API_KEY:
         try:
             return ChatGoogleGenerativeAI(
@@ -184,7 +173,7 @@ def get_llm():
             )
         except Exception as e:
             st.error(f"❌ Gemini failed: {e}")
-    
+   
     return None
 
 # ───────────────────────────────────────────────────────
@@ -192,32 +181,30 @@ def get_llm():
 # ───────────────────────────────────────────────────────
 with st.sidebar:
     st.header("🔑 API Keys")
-    
     if GROQ_API_KEY:
         st.success("✅ Groq loaded")
     else:
         st.warning("⚠️ No Groq key")
-    
+   
     if GOOGLE_API_KEY:
         st.success("✅ Gemini loaded")
     else:
         st.warning("⚠️ No Gemini key")
-    
+   
     st.divider()
-    
-    # PROCESSING MODE SELECTOR
+   
     st.header("⚙️ Processing Mode")
     use_docling = st.checkbox(
         "Use Docling (slower, smarter)",
         value=False,
-        help="Docling: Better for complex PDFs with tables/layouts but MUCH slower. Default: Fast simple loaders"
+        help="Docling: Better for complex PDFs with tables/layouts but MUCH slower."
     )
-    
+   
     if use_docling:
         st.warning("🐌 Docling mode: Slower but better for complex docs")
     else:
         st.info("⚡ Fast mode: Simple loaders + text splitting")
-    
+   
     st.divider()
     st.header("📁 Upload Documents")
     uploaded_files = st.file_uploader(
@@ -225,48 +212,51 @@ with st.sidebar:
         type=["pdf", "docx", "pptx", "html", "csv", "txt", "md"],
         accept_multiple_files=True
     )
-
+   
     if st.button("Process Documents", type="primary"):
         if not (GROQ_API_KEY or GOOGLE_API_KEY):
-            st.error("❌ Add API keys to .env!")
+            st.error("❌ Add API keys to .env or Streamlit secrets!")
         elif not uploaded_files:
             st.warning("⚠️ Upload files first")
         else:
-            # Choose processing method
             if use_docling:
                 with st.spinner("🔄 Docling processing (this may take a while)..."):
                     raw_docs = process_files_with_docling(uploaded_files)
             else:
                 with st.spinner("⚡ Fast processing..."):
                     raw_docs = process_files_fast(uploaded_files)
-            
+           
             if not raw_docs:
-                st.error("❌ No content extracted")
+                st.error("❌ No content extracted from any file")
                 st.stop()
-            
-            st.info(f"📄 Total: {len(raw_docs)} chunks")
-            
-            with st.spinner("🔄 Creating embeddings..."):
+           
+            st.info(f"📄 Total: {len(raw_docs)} chunks created")
+           
+            with st.spinner("🔄 Creating embeddings & vector store..."):
                 try:
                     embeddings = HuggingFaceEmbeddings(
                         model_name="all-MiniLM-L6-v2",
                         model_kwargs={"device": "cpu"},
-                        encode_kwargs={"normalize_embeddings": True}
+                        encode_kwargs={
+                            "normalize_embeddings": True,
+                            "batch_size": 16          # ← smaller batch = less memory usage
+                        }
                     )
-                    
+                   
                     st.session_state.vectorstore = FAISS.from_documents(
                         documents=raw_docs,
                         embedding=embeddings
                     )
-                    
+                   
                     st.session_state.retriever = st.session_state.vectorstore.as_retriever(
                         search_kwargs={"k": 4}
                     )
-                    
+                   
                     st.success(f"✅ Ready! {len(raw_docs)} chunks indexed")
-                    
+                   
                 except Exception as e:
-                    st.error(f"❌ Indexing failed: {str(e)}")
+                    st.error(f"❌ Indexing / embedding failed")
+                    st.exception(e)  # Shows full traceback
 
     st.markdown("---")
     if st.session_state.get("chat_history"):
@@ -279,22 +269,22 @@ with st.sidebar:
 # ───────────────────────────────────────────────────────
 if st.session_state.vectorstore and st.session_state.retriever:
     llm = get_llm()
-    
+   
     if not llm:
-        st.error("❌ No LLM available")
+        st.error("❌ No LLM available — check API keys")
     else:
         if GROQ_API_KEY:
             st.info("🤖 Groq (Llama 3.3 70B)")
         else:
             st.info("🤖 Gemini (1.5 Flash)")
-        
+       
         prompt = ChatPromptTemplate.from_messages([
             ("system", "Answer based on context. If context doesn't contain the answer, say so."),
             MessagesPlaceholder("chat_history"),
             ("human", "{question}"),
             ("system", "Context:\n{context}")
         ])
-
+       
         generation_chain = (
             RunnableParallel({
                 "question": itemgetter("question"),
@@ -305,30 +295,29 @@ if st.session_state.vectorstore and st.session_state.retriever:
             | llm
             | StrOutputParser()
         )
-
+       
         for msg in st.session_state.chat_history:
             role = "user" if isinstance(msg, HumanMessage) else "assistant"
             with st.chat_message(role):
                 st.markdown(msg.content)
-
+       
         if user_query := st.chat_input("Ask about your documents..."):
             with st.chat_message("user"):
                 st.markdown(user_query)
-
             with st.chat_message("assistant"):
                 with st.spinner("🤔 Thinking..."):
                     try:
                         retrieved_docs = st.session_state.retriever.invoke(user_query)
-                        
+                       
                         answer = generation_chain.invoke({
                             "question": user_query,
                             "chat_history": st.session_state.chat_history,
                             "docs": retrieved_docs
                         })
-
+                       
                         st.markdown(answer)
-
                         st.markdown("**Sources:**")
+                       
                         if retrieved_docs:
                             unique_docs = []
                             seen = set()
@@ -339,22 +328,21 @@ if st.session_state.vectorstore and st.session_state.retriever:
                                 if key not in seen:
                                     seen.add(key)
                                     unique_docs.append(doc)
-
                             for i, doc in enumerate(unique_docs, 1):
                                 filename = doc.metadata.get("source_file", "Unknown")
                                 page = doc.metadata.get("page", "N/A")
                                 snippet = doc.page_content.strip()[:180].replace("\n", " ") + "..."
                                 st.caption(f"[{i}] **{filename}** • Page {page}\n{snippet}")
-
+                       
                         st.session_state.chat_history.append(HumanMessage(content=user_query))
                         st.session_state.chat_history.append(AIMessage(content=answer))
-                        
+                       
                     except Exception as e:
-                        st.error(f"❌ Error: {str(e)}")
-
+                        st.error(f"❌ Error during query: {str(e)}")
+                        st.exception(e)
 else:
     st.info("👈 Upload files and click **Process Documents**")
-    
+   
     with st.expander("📖 Speed Comparison"):
         st.markdown("""
         ### ⚡ Fast Mode (Default - Recommended)
@@ -363,14 +351,14 @@ else:
         - Simple text extraction + chunking
         - Perfect for most use cases
         - **Use when:** Standard documents, speed matters
-        
+       
         ### 🐌 Docling Mode (Optional)
         **Speed:** ~30-120 seconds for same PDFs
         - Deep document analysis
         - Table extraction, layout detection
         - Semantic chunking
         - **Use when:** Complex PDFs with tables/forms, accuracy > speed
-        
+       
         ### 💡 Recommendation:
         Start with **Fast Mode**. Only enable Docling if:
         - Your PDFs have complex tables
